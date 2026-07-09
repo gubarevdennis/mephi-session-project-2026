@@ -27,7 +27,7 @@ getenforce
 curl http://localhost
 ```
 
-Ожидаемый результат:
+Результат вывода:
 
 ```bash
 Enforcing
