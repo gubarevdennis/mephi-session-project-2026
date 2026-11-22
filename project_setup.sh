@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =====================================================================
-#  Сессионный проект «ОС семейства Unix» — выполнение ТЗ с нуля.
+#  Сессионный проект «ОС семейства Unix» — выполнение ТЗ.
 #  Fedora 43, запуск от root на ВМ:
 #
 #     sudo DISK=/dev/nvme0n2 bash project_setup.sh
@@ -39,11 +39,10 @@ save_history() {
     > "$REPO/project_history.txt"
 }
 trap save_history EXIT
-set -o history
-set -x
-
 PART="${DISK}1"; [[ "$DISK" =~ [0-9]$ ]] && PART="${DISK}p1"
 CON=$(nmcli -g NAME,TYPE connection show --active | awk -F: '$2 ~ /ethernet/ {print $1; exit}')
+set -x
+set -o history
 
 ###################### РАЗДЕЛ 1. СЕТЬ ######################
 # 1.1 Статический IP, шлюз, DNS, hostname
@@ -61,11 +60,11 @@ ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt" || echo "!!! ping $DNS не 
 dnf install -y nginx tcpdump libcap-ng-utils
 dnf install -y policycoreutils-python-utils parted wget lynx
 # 2.2 Скачивание RPM и установка через rpm
-cd "$REPO"
-rm -f tcpdump-*.rpm
-dnf download tcpdump
-rpm -ivh --replacepkgs tcpdump-*.rpm
+rm -f /tmp/tcpdump-*.rpm "$REPO"/tcpdump-*.rpm
+dnf download --destdir=/tmp tcpdump
+rpm -ivh --replacepkgs /tmp/tcpdump-*.rpm
 rpm -qi tcpdump | head -5
+cp /tmp/tcpdump-*.rpm "$REPO/"
 
 ###################### РАЗДЕЛ 3. ФС И СЕРВИСЫ ######################
 # 3.1 Разметка, ФС с меткой, автомонтирование

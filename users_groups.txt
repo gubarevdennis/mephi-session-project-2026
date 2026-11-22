@@ -1,4 +1,0 @@
- --- id mephi-admin --- 
-uid=1000(mephi-admin) gid=1000(mephi-admin) groups=1000(mephi-admin),1001(mephi-devs)
- --- getent group mephi-devs --- 
-mephi-devs:x:1001:mephi-admin
