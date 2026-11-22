@@ -49,7 +49,7 @@ sudo DISK=/dev/nvme0n2 bash project_setup.sh  # подтвердить ввод�
 | `index.html`, `curl_output.txt` | 5.2 | страница и ответ web-сервера |
 | `mephi-nginx-screenshot.png` | 5.2 | скриншот сайта в браузере |
 
-Старые файлы первой попытки (`root_history`, `sudo_actions.txt`) оставлены для истории. Разбор ошибок по ним дан ниже.
+Файлы первой попытки (`root_history`, `sudo_actions.txt`) удалены из репозитория, но остаются в истории git (коммит `9f7bbfe`). Разбор ошибок по ним дан ниже.
 
 ---
 
@@ -202,13 +202,13 @@ ausearch -m AVC -c nginx -ts today                 # отказов SELinux дл
 
 ## Разбор ошибок первой попытки
 
-| # | Ошибка (по `root_history`, `project_history` старой версии, `sudo_actions.txt`) | Причина | Как сделано теперь |
+| # | Ошибка (по файлам первой попытки, коммит `9f7bbfe`) | Причина | Как сделано теперь |
 |---|---|---|---|
 | 1 | В истории нет настройки сети, установки пакетов, разметки диска, `useradd` | история первой root-сессии не сохранилась, а я не проверил её до сдачи | скрипт с `set -o history`, история пишется в `project_history.txt` |
 | 2 | `/data/mephi-web` с контекстом `default_t` / `unlabeled_t` | `chcon -R` → `restorecon -R` откатил контекст, правила в политике не было; потом `chcon` применён только к `index.html` | `semanage fcontext -a` + `restorecon -Rv` |
 | 3 | `setsebool -P httpd_enable_homedirs on` | ошибочная попытка: этот флаг для `~/public_html`, к `/data` отношения не имеет | не используется |
 | 4 | ФС без метки, fstab по UUID | при форматировании не указал `-L` | `mkfs.ext4 -L MEPHI_DATA`, `LABEL=` в fstab |
 | 5 | Нет `rpm -i`, нет `setcap`, нет `systemctl enable` | пропустил шаги ТЗ | выполнены в скрипте |
-| 6 | `PAM (sudo) illegal module type: item=user` в `sudo_actions.txt` | ошибка синтаксиса строки `pam_listfile` в `/etc/pam.d/system-auth`, которую подключают все сервисы | строка только в `/etc/pam.d/sshd` в правильном формате, проверка `sshd -t` |
+| 6 | `PAM (sudo) illegal module type: item=user` в журнале sudo первой попытки | ошибка синтаксиса строки `pam_listfile` в `/etc/pam.d/system-auth`, которую подключают все сервисы | строка только в `/etc/pam.d/sshd` в правильном формате, проверка `sshd -t` |
 | 7 | `sudo echo ... > файл` не записывал файл | перенаправление выполняет оболочка пользователя, а не sudo | запись от root / через `\| sudo tee` |
 | 8 | `user NOT in sudoers` | `mephi-admin` не был в `wheel` | `usermod -aG wheel mephi-admin` |
