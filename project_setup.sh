@@ -128,8 +128,10 @@ systemctl enable --now nginx
 systemctl restart nginx
 systemctl is-enabled nginx
 systemctl is-active nginx
-firewall-cmd --permanent --add-service=http
-firewall-cmd --reload
+if systemctl is-active -q firewalld; then
+  firewall-cmd --permanent --add-service=http
+  firewall-cmd --reload
+fi
 curl -s http://localhost | tee "$REPO/curl_output.txt"
 curl -s "http://${IP%/*}"
 ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
