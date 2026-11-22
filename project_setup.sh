@@ -92,7 +92,8 @@ usermod -aG mephi-devs mephi-admin
 usermod -aG wheel mephi-admin
 chown mephi-admin:mephi-devs /data/mephi-web
 chmod 2775 /data/mephi-web
-{ echo ' --- id mephi-admin --- '; id mephi-admin; echo ' --- getent group mephi-devs --- '; getent group mephi-devs; } | tee "$REPO/users_groups.txt"
+id mephi-admin | tee "$REPO/users_groups.txt"
+getent group mephi-devs | tee -a "$REPO/users_groups.txt"
 
 # 4.2 SELinux: постоянное правило контекста
 setenforce 1
@@ -130,7 +131,7 @@ echo "Hello from Student: $STUDENT" > /data/mephi-web/index.html
 chown mephi-admin:mephi-devs /data/mephi-web/index.html
 restorecon -Rv /data/mephi-web
 ls -Zd /data/mephi-web | tee "$REPO/file_contexts.txt"
-ls -Z /data/mephi-web/index.html | tee -a "$REPO/file_contexts.txt"
+ls -Z /data/mephi-web/index.html
 stat /data/mephi-web | tee "$REPO/permissions.txt"
 nginx -t
 systemctl start nginx
