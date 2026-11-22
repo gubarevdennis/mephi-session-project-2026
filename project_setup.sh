@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# =====================================================================
+#  Сессионный проект «ОС семейства Unix» — выполнение ТЗ с нуля.
+#  Fedora 43, запуск от root на ВМ:
+#
+#     sudo DISK=/dev/nvme0n2 bash project_setup.sh
+#
+#  DISK — ОТДЕЛЬНЫЙ диск под /data/mephi-web (ВСЕ ДАННЫЕ НА НЁМ БУДУТ УДАЛЕНЫ).
+#  Необязательные переменные: IP (192.168.1.100/24), GW (192.168.1.1),
+#  DNS (8.8.8.8), STUDENT (017).
+#
+#  Скрипт включает запись истории bash, поэтому каждая выполненная
+#  команда реально попадает в project_history.txt.
+# =====================================================================
+set -o errexit -o pipefail
+REPO="$(cd "$(dirname "$0")" && pwd)"
+
+: "${DISK:?Укажите диск: DISK=/dev/... (lsblk покажет имя)}"
+IP="${IP:-192.168.1.100/24}"
+GW="${GW:-192.168.1.1}"
+DNS="${DNS:-8.8.8.8}"
+STUDENT="${STUDENT:-017}"
+
+[ "$(id -u)" -eq 0 ] || { echo "Запускать от root (sudo)"; exit 1; }
+[ -b "$DISK" ] || { echo "$DISK не блочное устройство"; exit 1; }
+if lsblk -nro MOUNTPOINTS "$DISK" | grep -v -e '^$' -e '^/data/mephi-web$' | grep -q .; then
+  echo "На $DISK смонтировано что-то кроме /data/mephi-web (системный диск?) — отказ"; exit 1
+fi
+lsblk "$DISK"
+read -r -p "Все данные на $DISK будут уничтожены. Введите YES: " ans
+[ "$ans" = "YES" ] || exit 1
+
+# ---- запись истории выполняемых команд ----
+HISTSIZE=100000
+HISTTIMEFORMAT='%F %T  '
+set -o history
+trap 'history > "$REPO/project_history.txt"' EXIT
+set -x
+
+PART="${DISK}1"; [[ "$DISK" =~ [0-9]$ ]] && PART="${DISK}p1"
+CON=$(nmcli -g NAME,TYPE connection show --active | awk -F: '$2 ~ /ethernet/ {print $1; exit}')
+
+###################### РАЗДЕЛ 1. СЕТЬ ######################
+# 1.1 Статический IP, шлюз, DNS, hostname
+nmcli connection modify "$CON" ipv4.method manual ipv4.addresses "$IP" ipv4.gateway "$GW" ipv4.dns "$DNS"
+nmcli connection up "$CON"
+hostnamectl set-hostname mephi-2026.domain.local
+nmcli connection show "$CON" | grep -E '^ipv4\.(method|addresses|gateway|dns):'
+ip -4 addr show
+# 1.2 Проверка сети
+ping -c 4 "$GW"  | tee "$REPO/network_check.txt"
+ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt"
+
+###################### РАЗДЕЛ 2. ПО ######################
+# 2.1 Установка пакетов из репозитория
+dnf install -y nginx tcpdump libcap-ng-utils policycoreutils-python-utils parted
+# 2.2 Скачивание RPM и установка через rpm
+cd "$REPO"
+rm -f tcpdump-*.rpm
+dnf download tcpdump
+rpm -ivh --replacepkgs tcpdump-*.rpm
+rpm -qi tcpdump | head -5
+
+###################### РАЗДЕЛ 3. ФС И СЕРВИСЫ ######################
+# 3.1 Разметка, ФС с меткой, автомонтирование
+systemctl stop nginx || true
+umount /data/mephi-web 2>/dev/null || true
+sed -i "\#[[:space:]]/data/mephi-web[[:space:]]#d" /etc/fstab
+wipefs -a "$DISK"
+parted "$DISK" --script mklabel gpt mkpart primary ext4 0% 100%
+udevadm settle
+mkfs.ext4 -F -L MEPHI_DATA "$PART"
+mkdir -p /data/mephi-web
+echo "LABEL=MEPHI_DATA  /data/mephi-web  ext4  defaults  0 2" >> /etc/fstab
+systemctl daemon-reload
+mount -a
+findmnt /data/mephi-web
+lsblk -f "$DISK"
+cp /etc/fstab "$REPO/fstab.txt"
+
+###################### РАЗДЕЛ 4. ДОСТУП ######################
+# 4.1 Пользователь, группа, права
+id mephi-admin  >/dev/null 2>&1 || useradd -m -s /bin/bash mephi-admin
+getent group mephi-devs >/dev/null || groupadd mephi-devs
+usermod -aG mephi-devs mephi-admin
+usermod -aG wheel mephi-admin
+chown mephi-admin:mephi-devs /data/mephi-web
+chmod 2775 /data/mephi-web
+{ echo ' --- id mephi-admin --- '; id mephi-admin; echo ' --- getent group mephi-devs --- '; getent group mephi-devs; } | tee "$REPO/users_groups.txt"
+stat /data/mephi-web | tee "$REPO/permissions.txt"
+
+# 4.2 SELinux: постоянное правило контекста
+setenforce 1
+sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+semanage fcontext -a -t httpd_sys_content_t "/data/mephi-web(/.*)?" || semanage fcontext -m -t httpd_sys_content_t "/data/mephi-web(/.*)?"
+restorecon -Rv /data/mephi-web
+getenforce | tee "$REPO/selinux_status.txt"
+
+# 4.2 Capabilities вместо SUID для tcpdump
+chmod u-s /usr/sbin/tcpdump
+setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
+getcap /usr/sbin/tcpdump | tee "$REPO/tcpdump_capabilities.txt"
+filecap /usr/sbin/tcpdump
+su - mephi-admin -c 'timeout 5 tcpdump -c 3 -i any -nn' || true
+
+###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ТЕСТ ######################
+# 5.1 Запрет входа root по SSH через PAM (pam_listfile) + sshd
+echo root > /etc/security/denied_users
+chmod 644 /etc/security/denied_users
+restorecon -v /etc/security/denied_users
+grep -q 'pam_listfile.so.*denied_users' /etc/pam.d/sshd || \
+  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/security/denied_users' /etc/pam.d/sshd
+echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
+sshd -t
+systemctl restart sshd
+grep pam_listfile /etc/pam.d/sshd
+
+# 3.2 / 5.2 nginx: web-root, страница, запуск и автозагрузка
+sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
+grep -nE '^[[:space:]]*root' /etc/nginx/nginx.conf
+echo "Hello from Student: $STUDENT" > /data/mephi-web/index.html
+chown mephi-admin:mephi-devs /data/mephi-web/index.html
+restorecon -Rv /data/mephi-web
+ls -Zd /data/mephi-web | tee "$REPO/file_contexts.txt"
+ls -Z /data/mephi-web/index.html | tee -a "$REPO/file_contexts.txt"
+nginx -t
+systemctl enable --now nginx
+systemctl restart nginx
+systemctl is-enabled nginx
+systemctl is-active nginx
+firewall-cmd --permanent --add-service=http
+firewall-cmd --reload
+curl -s http://localhost | tee "$REPO/curl_output.txt"
+curl -s "http://${IP%/*}"
+ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
+journalctl -u nginx --no-pager -n 30 | tee "$REPO/nginx_recent_logs.txt"
+cp /data/mephi-web/index.html "$REPO/index.html"
+
+# ---- сохранение истории и прав на файлы ----
+set +x
+history > "$REPO/project_history.txt"
+chown -R "${SUDO_USER:-mephi-admin}": "$REPO"
+echo
+echo "Готово. История команд: $REPO/project_history.txt"
+echo "Сделайте скриншот браузера на http://${IP%/*} -> mephi-nginx-screenshot.png, затем git add/commit/push."
