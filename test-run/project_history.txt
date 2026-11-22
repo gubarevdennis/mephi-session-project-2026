@@ -1,0 +1,103 @@
+    1  ###################### РАЗДЕЛ 1. СЕТЬ ######################
+    2  # 1.1 Статический IP, шлюз, DNS, hostname
+    3  nmcli connection modify "cloud-init enp0s2" ipv4.method manual ipv4.addresses 10.0.2.15/24 ipv4.gateway 10.0.2.2 ipv4.dns 10.0.2.3
+    4  nmcli connection up "cloud-init enp0s2"
+    5  hostnamectl set-hostname mephi-2026.domain.local
+    6  nmcli connection show "cloud-init enp0s2" | grep -E '^ipv4\.(method|addresses|gateway|dns):'
+    7  ip -4 addr show
+    8  # 1.2 Проверка сети
+    9  ping -c 4 10.0.2.2  | tee "/home/fedora/proj/network_check.txt" || echo "!!! ping $GW не прошёл"
+   10  ping -c 4 10.0.2.3 | tee -a "/home/fedora/proj/network_check.txt" || echo "!!! ping $DNS не прошёл"
+   11  ###################### РАЗДЕЛ 2. ПО ######################
+   12  # 2.1 Установка пакетов из репозитория
+   13  dnf install -y nginx tcpdump libcap-ng-utils
+   14  dnf install -y policycoreutils-python-utils parted wget lynx
+   15  # 2.2 Скачивание RPM и установка через rpm
+   16  rm -f /tmp/tcpdump-*.rpm "$REPO"/tcpdump-*.rpm
+   17  dnf download --destdir=/tmp tcpdump
+   18  rpm -ivh --replacepkgs /tmp/tcpdump-*.rpm
+   19  rpm -qi tcpdump | head -5
+   20  cp /tmp/tcpdump-*.rpm "/home/fedora/proj/"
+   21  ###################### РАЗДЕЛ 3. ФС И СЕРВИСЫ ######################
+   22  # 3.1 Разметка, ФС с меткой, автомонтирование
+   23  systemctl stop nginx || true
+   24  umount /data/mephi-web 2>/dev/null || true
+   25  sed -i "\#[[:space:]]/data/mephi-web[[:space:]]#d" /etc/fstab
+   26  wipefs -a /dev/vdb
+   27  parted /dev/vdb --script mklabel gpt mkpart primary ext4 0% 100%
+   28  udevadm settle
+   29  wipefs -a /dev/vdb1
+   30  mkfs.ext4 -L MEPHI_DATA /dev/vdb1
+   31  mkdir -p /data/mephi-web
+   32  echo "LABEL=MEPHI_DATA  /data/mephi-web  ext4  defaults  0 2" >> /etc/fstab
+   33  systemctl daemon-reload
+   34  mount -a
+   35  findmnt /data/mephi-web
+   36  lsblk -f /dev/vdb
+   37  cp /etc/fstab "/home/fedora/proj/fstab.txt"
+   38  ###################### РАЗДЕЛ 4. ДОСТУП ######################
+   39  # 4.1 Пользователь, группа, права
+   40  useradd -m -s /bin/bash mephi-admin || echo "mephi-admin уже существует"
+   41  groupadd mephi-devs || echo "mephi-devs уже существует"
+   42  usermod -aG mephi-devs mephi-admin
+   43  usermod -aG wheel mephi-admin
+   44  chown mephi-admin:mephi-devs /data/mephi-web
+   45  chmod 2775 /data/mephi-web
+   46  { echo ' --- id mephi-admin --- '; id mephi-admin; echo ' --- getent group mephi-devs --- '; getent group mephi-devs; } | tee "/home/fedora/proj/users_groups.txt"
+   47  # 4.2 SELinux: постоянное правило контекста
+   48  setenforce 1
+   49  sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+   50  semanage fcontext -a -t httpd_sys_content_t "/data/mephi-web(/.*)?" || semanage fcontext -m -t httpd_sys_content_t "/data/mephi-web(/.*)?"
+   51  restorecon -Rv /data/mephi-web
+   52  getenforce | tee "/home/fedora/proj/selinux_status.txt"
+   53  # 4.2 Capabilities вместо SUID для tcpdump
+   54  chmod u-s /usr/sbin/tcpdump
+   55  setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
+   56  getcap /usr/sbin/tcpdump | tee "/home/fedora/proj/tcpdump_capabilities.txt"
+   57  filecap /usr/sbin/tcpdump
+   58  ( sleep 2; ping -c 3 10.0.2.2 >/dev/null ) &
+   59  su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp' || true
+   60  ###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ТЕСТ ######################
+   61  # 5.1 Запрет входа root через PAM (pam_listfile) в login и sshd + PermitRootLogin no
+   62  echo "root" > /etc/ssh/denied_users
+   63  chmod 644 /etc/ssh/denied_users
+   64  restorecon -v /etc/ssh/denied_users
+   65  sed -i --follow-symlinks '/pam_listfile.so/d' /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth
+   66  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/login
+   67  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/sshd
+   68  grep pam_listfile /etc/pam.d/login
+   69  echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
+   70  sshd -t
+   71  systemctl restart sshd
+   72  grep pam_listfile /etc/pam.d/sshd
+   73  # 3.2 / 5.2 nginx: web-root, страница, запуск и автозагрузка
+   74  sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
+   75  grep -nE '^[[:space:]]*root' /etc/nginx/nginx.conf
+   76  echo "Hello from Student: 017" > /data/mephi-web/index.html
+   77  chown mephi-admin:mephi-devs /data/mephi-web/index.html
+   78  restorecon -Rv /data/mephi-web
+   79  ls -Zd /data/mephi-web | tee "/home/fedora/proj/file_contexts.txt"
+   80  ls -Z /data/mephi-web/index.html | tee -a "/home/fedora/proj/file_contexts.txt"
+   81  stat /data/mephi-web | tee "/home/fedora/proj/permissions.txt"
+   82  nginx -t
+   83  systemctl start nginx
+   84  systemctl enable nginx
+   85  systemctl enable --now nginx
+   86  systemctl restart nginx
+   87  systemctl is-enabled nginx
+   88  systemctl is-active nginx
+   89  if systemctl is-active -q firewalld; then   firewall-cmd --permanent --add-service=http;   firewall-cmd --reload; fi
+   90  curl -s "http://10.0.2.15" | tee "/home/fedora/proj/curl_output.txt"
+   91  curl -s http://localhost
+   92  wget -qO- "http://10.0.2.15"
+   93  lynx -dump "http://10.0.2.15"
+   94  ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
+   95  journalctl -u nginx --no-pager -n 30 | tee "/home/fedora/proj/nginx_recent_logs.txt"
+   96  cp /data/mephi-web/index.html "/home/fedora/proj/index.html"
+   97  # ---- сохранение истории и прав на файлы ----
+   98  set +x
+   99  save_history
+  100  chown -R "${SUDO_USER:-mephi-admin}": "$REPO"
+  101  echo
+  102  echo "Готово. История команд: $REPO/project_history.txt"
+  103  echo "Сделайте скриншот браузера на http://10.0.2.15 -> mephi-nginx-screenshot.png, затем git add/commit/push."

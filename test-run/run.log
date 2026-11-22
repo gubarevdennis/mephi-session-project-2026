@@ -1,0 +1,273 @@
+NAME   MAJ:MIN RM SIZE RO TYPE MOUNTPOINTS
+vdb    253:16   0   2G  0 disk 
+└─vdb1 253:17   0   2G  0 part /data/mephi-web
++ set -o history
++ nmcli connection modify 'cloud-init enp0s2' ipv4.method manual ipv4.addresses 10.0.2.15/24 ipv4.gateway 10.0.2.2 ipv4.dns 10.0.2.3
++ nmcli connection up 'cloud-init enp0s2'
+Connection successfully activated (D-Bus active path: /org/freedesktop/NetworkManager/ActiveConnection/3)
++ hostnamectl set-hostname mephi-2026.domain.local
++ nmcli connection show 'cloud-init enp0s2'
++ grep -E '^ipv4\.(method|addresses|gateway|dns):'
+ipv4.method:                            manual
+ipv4.dns:                               10.0.2.3
+ipv4.addresses:                         10.0.2.15/24
+ipv4.gateway:                           10.0.2.2
++ ip -4 addr show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+2: enp0s2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    altname enx525400123456
+    inet 10.0.2.15/24 brd 10.0.2.255 scope global noprefixroute enp0s2
+       valid_lft forever preferred_lft forever
++ ping -c 4 10.0.2.2
++ tee /home/fedora/proj/network_check.txt
+PING 10.0.2.2 (10.0.2.2) 56(84) bytes of data.
+64 bytes from 10.0.2.2: icmp_seq=1 ttl=255 time=2.49 ms
+64 bytes from 10.0.2.2: icmp_seq=2 ttl=255 time=1.41 ms
+64 bytes from 10.0.2.2: icmp_seq=3 ttl=255 time=0.990 ms
+64 bytes from 10.0.2.2: icmp_seq=4 ttl=255 time=0.839 ms
+
+--- 10.0.2.2 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3007ms
+rtt min/avg/max/mdev = 0.839/1.430/2.487/0.644 ms
++ ping -c 4 10.0.2.3
++ tee -a /home/fedora/proj/network_check.txt
+PING 10.0.2.3 (10.0.2.3) 56(84) bytes of data.
+64 bytes from 10.0.2.3: icmp_seq=1 ttl=255 time=1.12 ms
+64 bytes from 10.0.2.3: icmp_seq=2 ttl=255 time=1.30 ms
+64 bytes from 10.0.2.3: icmp_seq=3 ttl=255 time=0.940 ms
+64 bytes from 10.0.2.3: icmp_seq=4 ttl=255 time=0.644 ms
+
+--- 10.0.2.3 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss, time 3009ms
+rtt min/avg/max/mdev = 0.644/1.003/1.304/0.243 ms
++ dnf install -y nginx tcpdump libcap-ng-utils
+Updating and loading repositories:
+Repositories loaded.
+Package "nginx-2:1.30.6-2.fc43.x86_64" is already installed.
+Package "tcpdump-14:4.99.6-2.fc43.x86_64" is already installed.
+Package "libcap-ng-utils-0.9.6-1.fc43.x86_64" is already installed.
+
+Nothing to do.
++ dnf install -y policycoreutils-python-utils parted wget lynx
+Updating and loading repositories:
+Repositories loaded.
+Package "policycoreutils-python-utils-3.9-7.fc43.noarch" is already installed.
+Package "parted-3.6-13.fc43.x86_64" is already installed.
+Package "wget2-wget-2.3.0-3.fc43.x86_64" is already installed.
+Package "lynx-2.9.2-4.fc43.x86_64" is already installed.
+
+Nothing to do.
++ rm -f '/tmp/tcpdump-*.rpm' '/home/fedora/proj/tcpdump-*.rpm'
++ dnf download --destdir=/tmp tcpdump
+Updating and loading repositories:
+Repositories loaded.
+Downloading Packages:
+ tcpdump-14:4.99.6-2.fc43.x86_64        100% |  15.9 KiB/s | 503.7 KiB |  00m32s
+>>> Curl error (28): Timeout was reached for https://ftp2.osuosl.org/pub/fedora/
+>>> Status code: 405 for http://ftp2.osuosl.org/pub/fedora/linux/updates/43/Ever
+>>> Status code: 405 for http://paducahix.mm.fcix.net/fedora/linux/updates/43/Ev
++ rpm -ivh --replacepkgs /tmp/tcpdump-4.99.6-2.fc43.x86_64.rpm
+Verifying...                          ########################################
+Preparing...                          ########################################
+Updating / installing...
+tcpdump-14:4.99.6-2.fc43              ########################################
++ rpm -qi tcpdump
++ head -5
+Name        : tcpdump
+Epoch       : 14
+Version     : 4.99.6
+Release     : 2.fc43
+Architecture: x86_64
++ cp /tmp/tcpdump-4.99.6-2.fc43.x86_64.rpm /home/fedora/proj/
++ systemctl stop nginx
++ umount /data/mephi-web
++ sed -i '\#[[:space:]]/data/mephi-web[[:space:]]#d' /etc/fstab
++ wipefs -a /dev/vdb
+/dev/vdb: 8 bytes were erased at offset 0x00000200 (gpt): 45 46 49 20 50 41 52 54
+/dev/vdb: 8 bytes were erased at offset 0x7ffffe00 (gpt): 45 46 49 20 50 41 52 54
+/dev/vdb: 2 bytes were erased at offset 0x000001fe (PMBR): 55 aa
+/dev/vdb: calling ioctl to re-read partition table: Success
++ parted /dev/vdb --script mklabel gpt mkpart primary ext4 0% 100%
++ udevadm settle
++ wipefs -a /dev/vdb1
+/dev/vdb1: 2 bytes were erased at offset 0x00000438 (ext4): 53 ef
++ mkfs.ext4 -L MEPHI_DATA /dev/vdb1
+mke2fs 1.47.3 (8-Jul-2025)
+Discarding device blocks:      0/523776             done                            
+Creating filesystem with 523776 4k blocks and 131072 inodes
+Filesystem UUID: 78264f09-1520-4587-afad-a0d6600855bb
+Superblock backups stored on blocks: 
+	32768, 98304, 163840, 229376, 294912
+
+Allocating group tables:  0/16     done                            
+Writing inode tables:  0/16     done                            
+Creating journal (8192 blocks): done
+Writing superblocks and filesystem accounting information:  0/16     done
+
++ mkdir -p /data/mephi-web
++ echo 'LABEL=MEPHI_DATA  /data/mephi-web  ext4  defaults  0 2'
++ systemctl daemon-reload
++ mount -a
++ findmnt /data/mephi-web
+TARGET          SOURCE    FSTYPE OPTIONS
+/data/mephi-web /dev/vdb1 ext4   rw,relatime,seclabel
++ lsblk -f /dev/vdb
+NAME   FSTYPE FSVER LABEL      UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+vdb                                                                                
+└─vdb1 ext4   1.0   MEPHI_DATA 78264f09-1520-4587-afad-a0d6600855bb    1.8G     0% /data/mephi-web
++ cp /etc/fstab /home/fedora/proj/fstab.txt
++ useradd -m -s /bin/bash mephi-admin
+useradd: user 'mephi-admin' already exists
++ echo 'mephi-admin уже существует'
+mephi-admin уже существует
++ groupadd mephi-devs
+groupadd: group 'mephi-devs' already exists
++ echo 'mephi-devs уже существует'
+mephi-devs уже существует
++ usermod -aG mephi-devs mephi-admin
++ usermod -aG wheel mephi-admin
++ chown mephi-admin:mephi-devs /data/mephi-web
++ chmod 2775 /data/mephi-web
++ echo ' --- id mephi-admin --- '
++ id mephi-admin
++ tee /home/fedora/proj/users_groups.txt
+ --- id mephi-admin --- 
+uid=1001(mephi-admin) gid=1001(mephi-admin) groups=1001(mephi-admin),10(wheel),1002(mephi-devs)
++ echo ' --- getent group mephi-devs --- '
++ getent group mephi-devs
+ --- getent group mephi-devs --- 
+mephi-devs:x:1002:mephi-admin
++ setenforce 1
++ sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
++ semanage fcontext -a -t httpd_sys_content_t '/data/mephi-web(/.*)?'
+File context for /data/mephi-web(/.*)? already defined, modifying instead
++ restorecon -Rv /data/mephi-web
+Relabeled /data/mephi-web from system_u:object_r:unlabeled_t:s0 to system_u:object_r:httpd_sys_content_t:s0
+Relabeled /data/mephi-web/lost+found from system_u:object_r:unlabeled_t:s0 to system_u:object_r:httpd_sys_content_t:s0
++ getenforce
++ tee /home/fedora/proj/selinux_status.txt
+Enforcing
++ chmod u-s /usr/sbin/tcpdump
++ setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
++ getcap /usr/sbin/tcpdump
++ tee /home/fedora/proj/tcpdump_capabilities.txt
+/usr/sbin/tcpdump cap_net_admin,cap_net_raw=ep
++ filecap /usr/sbin/tcpdump
+set       file                   capabilities  rootid
+effective /usr/sbin/tcpdump      net_admin, net_raw
++ su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp'
++ sleep 2
++ ping -c 3 10.0.2.2
+tcpdump: WARNING: any: That device doesn't support promiscuous mode
+(Promiscuous mode not supported on the "any" device)
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on any, link-type LINUX_SLL2 (Linux cooked v2), snapshot length 262144 bytes
+05:11:30.316808 enp0s2 Out IP 10.0.2.15 > 10.0.2.2: ICMP echo request, id 3, seq 3, length 64
+05:11:30.318880 enp0s2 In  IP 10.0.2.2 > 10.0.2.15: ICMP echo reply, id 3, seq 3, length 64
+
+2 packets captured
+2 packets received by filter
+0 packets dropped by kernel
++ true
++ echo root
++ chmod 644 /etc/ssh/denied_users
++ restorecon -v /etc/ssh/denied_users
++ sed -i --follow-symlinks /pam_listfile.so/d /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth
++ sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/login
++ sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/sshd
++ grep pam_listfile /etc/pam.d/login
+auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users
++ echo 'PermitRootLogin no'
++ sshd -t
++ systemctl restart sshd
++ grep pam_listfile /etc/pam.d/sshd
+auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users
++ sed -i '0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#' /etc/nginx/nginx.conf
++ grep -nE '^[[:space:]]*root' /etc/nginx/nginx.conf
+36:        root         /data/mephi-web;
++ echo 'Hello from Student: 017'
++ chown mephi-admin:mephi-devs /data/mephi-web/index.html
++ restorecon -Rv /data/mephi-web
++ ls -Zd /data/mephi-web
++ tee /home/fedora/proj/file_contexts.txt
+system_u:object_r:httpd_sys_content_t:s0 /data/mephi-web
++ ls -Z /data/mephi-web/index.html
++ tee -a /home/fedora/proj/file_contexts.txt
+unconfined_u:object_r:httpd_sys_content_t:s0 /data/mephi-web/index.html
++ stat /data/mephi-web
++ tee /home/fedora/proj/permissions.txt
+  File: /data/mephi-web
+  Size: 4096      	Blocks: 8          IO Block: 4096   directory
+Device: 253,17	Inode: 2           Links: 3
+Access: (2775/drwxrwsr-x)  Uid: ( 1001/mephi-admin)   Gid: ( 1002/mephi-devs)
+Context: system_u:object_r:httpd_sys_content_t:s0
+Access: 2026-11-22 05:11:42.038718766 +0000
+Modify: 2026-11-22 05:11:41.759718752 +0000
+Change: 2026-11-22 05:11:41.759718752 +0000
+ Birth: 2026-11-22 05:10:55.000000000 +0000
++ nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
++ systemctl start nginx
++ systemctl enable nginx
++ systemctl enable --now nginx
++ systemctl restart nginx
++ systemctl is-enabled nginx
+enabled
++ systemctl is-active nginx
+active
++ systemctl is-active -q firewalld
++ tee /home/fedora/proj/curl_output.txt
++ curl -s http://10.0.2.15
+Hello from Student: 017
++ curl -s http://localhost
+Hello from Student: 017
++ wget -qO- http://10.0.2.15
+Hello from Student: 017
++ lynx -dump http://10.0.2.15
+   Hello from Student: 017
++ ausearch -m AVC -c nginx -ts today
+<no matches>
++ echo 'AVC-отказов для nginx нет'
+AVC-отказов для nginx нет
++ journalctl -u nginx --no-pager -n 30
++ tee /home/fedora/proj/nginx_recent_logs.txt
+Nov 22 04:14:30 mephi-2026.domain.local nginx[877]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 22 04:14:31 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+-- Boot 9a537b699cd24ecf89c95ab8e8a087ac --
+Nov 22 04:31:49 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 04:31:51 mephi-2026.domain.local nginx[877]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 22 04:31:51 mephi-2026.domain.local nginx[877]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 22 04:31:52 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
+Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
+Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 2.058s CPU time, 10.3M memory peak.
+-- Boot 616b58a0d42a400f873e9d79358ca804 --
+Nov 22 05:08:44 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 05:08:46 mephi-2026.domain.local nginx[878]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 22 05:08:46 mephi-2026.domain.local nginx[878]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 22 05:08:47 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
+Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
+Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 2.573s CPU time, 10.6M memory peak.
+Nov 22 05:11:43 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 05:11:44 mephi-2026.domain.local nginx[1326]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 22 05:11:44 mephi-2026.domain.local nginx[1326]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 22 05:11:45 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
+Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
+Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 1.750s CPU time, 6.3M memory peak.
+Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 22 05:11:58 mephi-2026.domain.local nginx[1445]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 22 05:11:58 mephi-2026.domain.local nginx[1445]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 22 05:11:59 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
++ cp /data/mephi-web/index.html /home/fedora/proj/index.html
++ set +x
+
+Готово. История команд: /home/fedora/proj/project_history.txt
+Сделайте скриншот браузера на http://10.0.2.15 -> mephi-nginx-screenshot.png, затем git add/commit/push.
