@@ -48,8 +48,8 @@ hostnamectl set-hostname mephi-2026.domain.local
 nmcli connection show "$CON" | grep -E '^ipv4\.(method|addresses|gateway|dns):'
 ip -4 addr show
 # 1.2 Проверка сети
-ping -c 4 "$GW"  | tee "$REPO/network_check.txt"
-ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt"
+ping -c 4 "$GW"  | tee "$REPO/network_check.txt" || echo "!!! ping $GW не прошёл"
+ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt" || echo "!!! ping $DNS не прошёл"
 
 ###################### РАЗДЕЛ 2. ПО ######################
 # 2.1 Установка пакетов из репозитория
