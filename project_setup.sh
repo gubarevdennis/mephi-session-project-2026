@@ -33,8 +33,14 @@ read -r -p "Все данные на $DISK будут уничтожены. Вв
 # ---- запись истории выполняемых команд ----
 HISTSIZE=100000
 HISTTIMEFORMAT='%F %T  '
+save_history() {
+  history | sed -e "s#\"\$CON\"#\"$CON\"#g" -e "s#\"\$DISK\"#$DISK#g" -e "s#\"\$PART\"#$PART#g" \
+    -e "s#\"\$IP\"#$IP#g" -e "s#\"\$GW\"#$GW#g" -e "s#\"\$DNS\"#$DNS#g" \
+    -e "s#\"\$REPO/#\"$REPO/#g" -e "s#\$STUDENT#$STUDENT#g" -e "s#\\\${IP%/\*}#${IP%/*}#g" \
+    > "$REPO/project_history.txt"
+}
+trap save_history EXIT
 set -o history
-trap 'history > "$REPO/project_history.txt"' EXIT
 set -x
 
 PART="${DISK}1"; [[ "$DISK" =~ [0-9]$ ]] && PART="${DISK}p1"
@@ -87,7 +93,6 @@ usermod -aG wheel mephi-admin
 chown mephi-admin:mephi-devs /data/mephi-web
 chmod 2775 /data/mephi-web
 { echo ' --- id mephi-admin --- '; id mephi-admin; echo ' --- getent group mephi-devs --- '; getent group mephi-devs; } | tee "$REPO/users_groups.txt"
-stat /data/mephi-web | tee "$REPO/permissions.txt"
 
 # 4.2 SELinux: постоянное правило контекста
 setenforce 1
@@ -101,7 +106,8 @@ chmod u-s /usr/sbin/tcpdump
 setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
 getcap /usr/sbin/tcpdump | tee "$REPO/tcpdump_capabilities.txt"
 filecap /usr/sbin/tcpdump
-su - mephi-admin -c 'timeout 5 tcpdump -c 3 -i any -nn' || true
+( sleep 2; ping -c 3 "$GW" >/dev/null ) &
+su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp' || true
 
 ###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ТЕСТ ######################
 # 5.1 Запрет входа root по SSH через PAM (pam_listfile) + sshd
@@ -123,6 +129,7 @@ chown mephi-admin:mephi-devs /data/mephi-web/index.html
 restorecon -Rv /data/mephi-web
 ls -Zd /data/mephi-web | tee "$REPO/file_contexts.txt"
 ls -Z /data/mephi-web/index.html | tee -a "$REPO/file_contexts.txt"
+stat /data/mephi-web | tee "$REPO/permissions.txt"
 nginx -t
 systemctl enable --now nginx
 systemctl restart nginx
@@ -140,7 +147,7 @@ cp /data/mephi-web/index.html "$REPO/index.html"
 
 # ---- сохранение истории и прав на файлы ----
 set +x
-history > "$REPO/project_history.txt"
+save_history
 chown -R "${SUDO_USER:-mephi-admin}": "$REPO"
 echo
 echo "Готово. История команд: $REPO/project_history.txt"
