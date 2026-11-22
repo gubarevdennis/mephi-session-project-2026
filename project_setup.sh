@@ -32,7 +32,6 @@ read -r -p "Все данные на $DISK будут уничтожены. Вв
 
 # ---- запись истории выполняемых команд ----
 HISTSIZE=100000
-HISTTIMEFORMAT='%F %T  '
 save_history() {
   history | sed -e "s#\"\$CON\"#\"$CON\"#g" -e "s#\"\$DISK\"#$DISK#g" -e "s#\"\$PART\"#$PART#g" \
     -e "s#\"\$IP\"#$IP#g" -e "s#\"\$GW\"#$GW#g" -e "s#\"\$DNS\"#$DNS#g" \
@@ -59,7 +58,8 @@ ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt" || echo "!!! ping $DNS не 
 
 ###################### РАЗДЕЛ 2. ПО ######################
 # 2.1 Установка пакетов из репозитория
-dnf install -y nginx tcpdump libcap-ng-utils policycoreutils-python-utils parted
+dnf install -y nginx tcpdump libcap-ng-utils
+dnf install -y policycoreutils-python-utils parted wget lynx
 # 2.2 Скачивание RPM и установка через rpm
 cd "$REPO"
 rm -f tcpdump-*.rpm
@@ -75,7 +75,8 @@ sed -i "\#[[:space:]]/data/mephi-web[[:space:]]#d" /etc/fstab
 wipefs -a "$DISK"
 parted "$DISK" --script mklabel gpt mkpart primary ext4 0% 100%
 udevadm settle
-mkfs.ext4 -F -L MEPHI_DATA "$PART"
+wipefs -a "$PART"
+mkfs.ext4 -L MEPHI_DATA "$PART"
 mkdir -p /data/mephi-web
 echo "LABEL=MEPHI_DATA  /data/mephi-web  ext4  defaults  0 2" >> /etc/fstab
 systemctl daemon-reload
@@ -86,8 +87,8 @@ cp /etc/fstab "$REPO/fstab.txt"
 
 ###################### РАЗДЕЛ 4. ДОСТУП ######################
 # 4.1 Пользователь, группа, права
-id mephi-admin  >/dev/null 2>&1 || useradd -m -s /bin/bash mephi-admin
-getent group mephi-devs >/dev/null || groupadd mephi-devs
+useradd -m -s /bin/bash mephi-admin || echo "mephi-admin уже существует"
+groupadd mephi-devs || echo "mephi-devs уже существует"
 usermod -aG mephi-devs mephi-admin
 usermod -aG wheel mephi-admin
 chown mephi-admin:mephi-devs /data/mephi-web
@@ -110,12 +111,14 @@ filecap /usr/sbin/tcpdump
 su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp' || true
 
 ###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ТЕСТ ######################
-# 5.1 Запрет входа root по SSH через PAM (pam_listfile) + sshd
-echo root > /etc/security/denied_users
-chmod 644 /etc/security/denied_users
-restorecon -v /etc/security/denied_users
-grep -q 'pam_listfile.so.*denied_users' /etc/pam.d/sshd || \
-  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/security/denied_users' /etc/pam.d/sshd
+# 5.1 Запрет входа root через PAM (pam_listfile) в login и sshd + PermitRootLogin no
+echo "root" > /etc/ssh/denied_users
+chmod 644 /etc/ssh/denied_users
+restorecon -v /etc/ssh/denied_users
+sed -i --follow-symlinks '/pam_listfile.so/d' /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth
+sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/login
+sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/sshd
+grep pam_listfile /etc/pam.d/login
 echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
 sshd -t
 systemctl restart sshd
@@ -131,6 +134,8 @@ ls -Zd /data/mephi-web | tee "$REPO/file_contexts.txt"
 ls -Z /data/mephi-web/index.html | tee -a "$REPO/file_contexts.txt"
 stat /data/mephi-web | tee "$REPO/permissions.txt"
 nginx -t
+systemctl start nginx
+systemctl enable nginx
 systemctl enable --now nginx
 systemctl restart nginx
 systemctl is-enabled nginx
@@ -139,8 +144,10 @@ if systemctl is-active -q firewalld; then
   firewall-cmd --permanent --add-service=http
   firewall-cmd --reload
 fi
-curl -s http://localhost | tee "$REPO/curl_output.txt"
-curl -s "http://${IP%/*}"
+curl -s "http://${IP%/*}" | tee "$REPO/curl_output.txt"
+curl -s http://localhost
+wget -qO- "http://${IP%/*}"
+lynx -dump "http://${IP%/*}"
 ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
 journalctl -u nginx --no-pager -n 30 | tee "$REPO/nginx_recent_logs.txt"
 cp /data/mephi-web/index.html "$REPO/index.html"

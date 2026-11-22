@@ -3,6 +3,7 @@
 | Поле | Значение |
 |---|---|
 | Студент | Денис Губарев |
+| Зачётная книжка | ________ (вписать) |
 | Номер студента | 017 |
 | ОС | Fedora 43 (aarch64) |
 | Hostname | `mephi-2026.domain.local` |
@@ -21,7 +22,7 @@
 
 Поэтому все пункты ТЗ выполнены **заново, с нуля**, скриптом [`project_setup.sh`](project_setup.sh).
 Скрипт включает запись истории bash (`set -o history`), поэтому каждая реально выполненная команда
-с датой и временем попадает в `project_history.txt`. Плюс `set -x` печатает каждую команду
+попадает в `project_history.txt`, с уже подставленными значениями (диск, IP). Плюс `set -x` печатает каждую команду
 вместе с подставленными значениями.
 
 Запуск:
@@ -36,7 +37,7 @@ sudo DISK=/dev/nvme0n2 bash project_setup.sh  # подтвердить ввод�
 | Файл | Раздел | Что проверяется |
 |---|---|---|
 | `project_setup.sh` | все | все команды выполнения ТЗ |
-| `project_history.txt` | все | история реально выполненных команд (с датой/временем) |
+| `project_history.txt` | все | история реально выполненных команд |
 | `network_check.txt` | 1.2 | ping шлюза и 8.8.8.8 |
 | `tcpdump-4.99.6-2.fc43.aarch64.rpm` | 2.2 | RPM, скачанный через `dnf download` |
 | `fstab.txt` | 3.1 | запись автомонтирования по метке |
@@ -46,7 +47,7 @@ sudo DISK=/dev/nvme0n2 bash project_setup.sh  # подтвердить ввод�
 | `selinux_status.txt` | 4.2 | `Enforcing` |
 | `file_contexts.txt` | 4.2 | контекст `httpd_sys_content_t` у директории и `index.html` |
 | `tcpdump_capabilities.txt` | 4.2 | `cap_net_admin,cap_net_raw=ep` |
-| `index.html`, `curl_output.txt` | 5.2 | страница и ответ web-сервера |
+| `index.html`, `curl_output.txt` | 5.2 | страница и ответ web-сервера по IP `192.168.1.100` |
 | `mephi-nginx-screenshot.png` | 5.2 | скриншот сайта в браузере |
 
 Файлы первой попытки (`root_history`, `sudo_actions.txt`) удалены из репозитория, но остаются в истории git (коммит `9f7bbfe`). Разбор ошибок по ним дан ниже.
@@ -81,10 +82,11 @@ ping -c 4 8.8.8.8     | tee -a network_check.txt
 ### 2.1 Установка пакетов
 
 ```bash
-dnf install -y nginx tcpdump libcap-ng-utils policycoreutils-python-utils parted
+dnf install -y nginx tcpdump libcap-ng-utils
+dnf install -y policycoreutils-python-utils parted wget lynx
 ```
 
-`policycoreutils-python-utils` нужен для `semanage`, `parted` нужен для разметки диска.
+Вторая строка ставит вспомогательные утилиты: `semanage` (policycoreutils-python-utils), `parted` для разметки, `wget` и `lynx` для проверки сайта.
 
 ### 2.2 Скачивание и ручная установка RPM
 
@@ -103,7 +105,8 @@ rpm -qi tcpdump
 ```bash
 wipefs -a /dev/nvme0n2
 parted /dev/nvme0n2 --script mklabel gpt mkpart primary ext4 0% 100%
-mkfs.ext4 -F -L MEPHI_DATA /dev/nvme0n2p1
+wipefs -a /dev/nvme0n2p1
+mkfs.ext4 -L MEPHI_DATA /dev/nvme0n2p1
 mkdir -p /data/mephi-web
 echo "LABEL=MEPHI_DATA  /data/mephi-web  ext4  defaults  0 2" >> /etc/fstab
 systemctl daemon-reload
@@ -121,7 +124,8 @@ cp /etc/fstab fstab.txt
 ```bash
 sed -i 's#root .*;#root /data/mephi-web;#' /etc/nginx/nginx.conf   # первый root в server{}
 nginx -t
-systemctl enable --now nginx
+systemctl start nginx
+systemctl enable nginx            # или одной командой: systemctl enable --now nginx
 systemctl is-enabled nginx        # enabled
 systemctl is-active nginx         # active
 firewall-cmd --permanent --add-service=http && firewall-cmd --reload
@@ -170,33 +174,40 @@ su - mephi-admin -c 'timeout 5 tcpdump -c 3 -i any -nn'   # захват без 
 
 ## Раздел 5. Аутентификация и тестирование
 
-### 5.1 Запрет входа root по SSH
+### 5.1 Запрет входа root через PAM
 
 ```bash
-echo root > /etc/security/denied_users
-chmod 644 /etc/security/denied_users
-restorecon -v /etc/security/denied_users
-# вторая строка /etc/pam.d/sshd:
-# auth required pam_listfile.so onerr=succeed item=user sense=deny file=/etc/security/denied_users
+echo "root" > /etc/ssh/denied_users
+chmod 644 /etc/ssh/denied_users
+restorecon -v /etc/ssh/denied_users
+# вторая строка /etc/pam.d/login и /etc/pam.d/sshd:
+# auth required pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users
 echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
 sshd -t && systemctl restart sshd
 ```
 
-Строка добавлена **только** в `/etc/pam.d/sshd`. В первой попытке я вписал её с ошибкой в
-`system-auth`, и это сломало `sudo` (см. разбор).
+Строка добавлена в `/etc/pam.d/login` (локальный вход) и `/etc/pam.d/sshd` (вход по SSH), но **не** в
+`system-auth`. В первой попытке я вписал её с ошибкой именно в `system-auth`, который подключают все
+сервисы, и это сломало `sudo` (см. разбор). Права администратора остаются через `sudo` (группа `wheel`).
 
 ### 5.2 Web-страница и проверка
 
 ```bash
 echo "Hello from Student: 017" > /data/mephi-web/index.html
 restorecon -Rv /data/mephi-web
-curl -s http://localhost | tee curl_output.txt     # Hello from Student: 017
-curl -s http://192.168.1.100
+curl -s http://192.168.1.100 | tee curl_output.txt   # Hello from Student: 017
+curl -s http://localhost
+wget -qO- http://192.168.1.100
+lynx -dump http://192.168.1.100
 ausearch -m AVC -c nginx -ts today                 # отказов SELinux для nginx нет
 ```
 
+Проверка идёт по IP-адресу, а не только по `localhost`, поэтому подтверждает и сеть, и web-сервер.
 Проверка проходит при SELinux **Enforcing**, без отключения SELinux и без лишних `setsebool`.
-Скриншот лежит в `mephi-nginx-screenshot.png`.
+
+## Скриншоты
+
+* `mephi-nginx-screenshot.png`: сайт в браузере по адресу `http://192.168.1.100`.
 
 ---
 
