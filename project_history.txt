@@ -51,63 +51,62 @@
    51  groupadd mephi-devs || echo "mephi-devs уже существует"
    52  echo "mephi-admin:P@ssw0rd2026" | chpasswd
    53  usermod -aG mephi-devs mephi-admin
-   54  usermod -aG wheel mephi-admin
-   55  chown mephi-admin:mephi-devs /data/mephi-web
-   56  chmod 2775 /data/mephi-web
-   57  ls -ld /data/mephi-web
-   58  # 4.2 MAC: SELinux Enforcing, контекст httpd_sys_content_t, nginx отдаёт /data/mephi-web
-   59  setenforce 1
-   60  sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
-   61  getenforce
-   62  semanage fcontext -a -t httpd_sys_content_t "/data/mephi-web(/.*)?" || semanage fcontext -m -t httpd_sys_content_t "/data/mephi-web(/.*)?"
-   63  restorecon -Rv /data/mephi-web
-   64  sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
-   65  grep -q 'charset utf-8;' /etc/nginx/nginx.conf || sed -i '0,/^\([[:space:]]*\)root[[:space:]]\+\/data\/mephi-web;/s##&\n\1charset utf-8;#' /etc/nginx/nginx.conf
-   66  grep -nE '^[[:space:]]*(root|charset)' /etc/nginx/nginx.conf
-   67  nginx -t
-   68  systemctl restart nginx
-   69  if systemctl is-active -q firewalld; then   firewall-cmd --permanent --add-service=http;   firewall-cmd --reload; fi
-   70  # 4.2 Capabilities: снять SUID, cap_net_raw,cap_net_admin+ep, проверка от mephi-admin
-   71  chmod u-s /usr/sbin/tcpdump
-   72  setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
-   73  getcap /usr/sbin/tcpdump
-   74  sudo -u mephi-admin tcpdump --help
-   75  ###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ПРОВЕРКА ######################
-   76  # 5.1 root не может войти ни с консоли (login), ни по SSH (sshd): pam_listfile.so
-   77  echo "root" > /etc/ssh/denied_users
-   78  chmod 644 /etc/ssh/denied_users
-   79  restorecon -v /etc/ssh/denied_users
-   80  sed -i --follow-symlinks '/pam_listfile.so/d' /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth
-   81  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/login
-   82  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/sshd
-   83  grep pam_listfile /etc/pam.d/login /etc/pam.d/sshd
-   84  echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
-   85  sshd -t
-   86  systemctl restart sshd
-   87  # 5.2.1 Персональная страница, созданная пользователем mephi-admin
-   88  sudo -u mephi-admin bash -c "echo 'Hello from Student: М2651068' > /data/mephi-web/index.html"
-   89  ls -lZ /data/mephi-web/index.html
-   90  # 5.2.2 Итоговая проверка доступности
-   91  curl http://localhost
-   92  curl http://192.168.1.100
-   93  wget -qO- http://192.168.1.100
-   94  lynx -dump http://192.168.1.100
-   95  ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
-   96  ###################### РАЗДЕЛ 6. АРТЕФАКТЫ ДЛЯ GITHUB (команды из п. 6.1 ТЗ) ######################
-   97  cd "/home/fedora/mephi-session-project-2026"
-   98  set +e
-   99  ping -c 4 192.168.1.1 > network_check.txt
-  100  ping -c 4 8.8.8.8 >> network_check.txt
-  101  set -e
-  102  journalctl -u nginx --since "5 minutes ago" > nginx_recent_logs.txt
-  103  cp /etc/fstab fstab.txt
-  104  getenforce > selinux_status.txt
-  105  ls -Zd /data/mephi-web > file_contexts.txt
-  106  getcap /usr/sbin/tcpdump > tcpdump_capabilities.txt
-  107  stat /data/mephi-web > permissions.txt
-  108  id mephi-admin > users_groups.txt
-  109  getent group mephi-devs >> users_groups.txt
-  110  curl -s http://192.168.1.100 > curl_output.txt
-  111  cp /data/mephi-web/index.html index.html
-  112  cp /tmp/tcpdump-*.rpm .
-  113  sync
+   54  chown mephi-admin:mephi-devs /data/mephi-web
+   55  chmod 2775 /data/mephi-web
+   56  ls -ld /data/mephi-web
+   57  # 4.2 MAC: SELinux Enforcing, контекст httpd_sys_content_t, nginx отдаёт /data/mephi-web
+   58  setenforce 1
+   59  sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+   60  getenforce
+   61  semanage fcontext -a -t httpd_sys_content_t "/data/mephi-web(/.*)?" || semanage fcontext -m -t httpd_sys_content_t "/data/mephi-web(/.*)?"
+   62  restorecon -Rv /data/mephi-web
+   63  sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
+   64  grep -q 'charset utf-8;' /etc/nginx/nginx.conf || sed -i '0,/^\([[:space:]]*\)root[[:space:]]\+\/data\/mephi-web;/s##&\n\1charset utf-8;#' /etc/nginx/nginx.conf
+   65  grep -nE '^[[:space:]]*(root|charset)' /etc/nginx/nginx.conf
+   66  nginx -t
+   67  systemctl restart nginx
+   68  if systemctl is-active -q firewalld; then   firewall-cmd --permanent --add-service=http;   firewall-cmd --reload; fi
+   69  # 4.2 Capabilities: снять SUID, cap_net_raw,cap_net_admin+ep, проверка от mephi-admin
+   70  chmod u-s /usr/sbin/tcpdump
+   71  setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
+   72  getcap /usr/sbin/tcpdump
+   73  sudo -u mephi-admin tcpdump --help
+   74  ###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ПРОВЕРКА ######################
+   75  # 5.1 root не может войти ни с консоли (login), ни по SSH (sshd): pam_listfile.so
+   76  echo "root" > /etc/ssh/denied_users
+   77  chmod 644 /etc/ssh/denied_users
+   78  restorecon -v /etc/ssh/denied_users
+   79  sed -i --follow-symlinks '/pam_listfile.so/d' /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth
+   80  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/login
+   81  sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/sshd
+   82  grep pam_listfile /etc/pam.d/login /etc/pam.d/sshd
+   83  echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
+   84  sshd -t
+   85  systemctl restart sshd
+   86  # 5.2.1 Персональная страница, созданная пользователем mephi-admin
+   87  sudo -u mephi-admin bash -c "echo 'Hello from Student: М2651068' > /data/mephi-web/index.html"
+   88  ls -lZ /data/mephi-web/index.html
+   89  # 5.2.2 Итоговая проверка доступности
+   90  curl http://localhost
+   91  curl http://192.168.1.100
+   92  wget -qO- http://192.168.1.100
+   93  lynx -dump http://192.168.1.100
+   94  ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
+   95  ###################### РАЗДЕЛ 6. АРТЕФАКТЫ ДЛЯ GITHUB (команды из п. 6.1 ТЗ) ######################
+   96  cd "/home/fedora/mephi-session-project-2026"
+   97  set +e
+   98  ping -c 4 192.168.1.1 > network_check.txt
+   99  ping -c 4 8.8.8.8 >> network_check.txt
+  100  set -e
+  101  journalctl -u nginx --since "5 minutes ago" > nginx_recent_logs.txt
+  102  cp /etc/fstab fstab.txt
+  103  getenforce > selinux_status.txt
+  104  ls -Zd /data/mephi-web > file_contexts.txt
+  105  getcap /usr/sbin/tcpdump > tcpdump_capabilities.txt
+  106  stat /data/mephi-web > permissions.txt
+  107  id mephi-admin > users_groups.txt
+  108  getent group mephi-devs >> users_groups.txt
+  109  curl -s http://192.168.1.100 > curl_output.txt
+  110  cp /data/mephi-web/index.html index.html
+  111  cp /tmp/tcpdump-*.rpm .
+  112  sync
