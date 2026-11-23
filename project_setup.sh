@@ -33,9 +33,9 @@ read -r -p "Все данные на $DISK будут уничтожены. Вв
 # ---- запись истории выполняемых команд ----
 HISTSIZE=100000
 save_history() {
-  history | sed -e "s#\"\$CON\"#\"$CON\"#g" -e "s#\"\$DISK\"#$DISK#g" -e "s#\"\$PART\"#$PART#g" \
-    -e "s#\"\$IP\"#$IP#g" -e "s#\"\$GW\"#$GW#g" -e "s#\"\$DNS\"#$DNS#g" \
-    -e "s#\"\$REPO/#\"$REPO/#g" -e "s#\$STUDENT#$STUDENT#g" -e "s#\\\${IP%/\*}#${IP%/*}#g" \
+  history | sed -e "/---- сохранение истории/,\$d" -e "s#\"\$CON\"#\"$CON\"#g" -e "s#\"\$DISK\"#$DISK#g" -e "s#\"\$PART\"#$PART#g" \
+    -e "s#\"\$IP\"#$IP#g" -e "s#\"\$GW\"#$GW#g" -e "s#\"\$DNS\"#$DNS#g" -e "s#\\\$CON#$CON#g" \
+    -e "s#\"\$REPO/#\"$REPO/#g" -e "s#\"\$REPO\"#\"$REPO\"#g" -e "s#\$STUDENT#$STUDENT#g" -e "s#\\\${IP%/\*}#${IP%/*}#g" \
     > "$REPO/project_history.txt"
 }
 trap save_history EXIT
@@ -44,32 +44,35 @@ CON=$(nmcli -g NAME,TYPE connection show --active | awk -F: '$2 ~ /ethernet/ {pr
 set -x
 set -o history
 
-###################### РАЗДЕЛ 1. СЕТЬ ######################
-# 1.1 Статический IP, шлюз, DNS, hostname
+###################### РАЗДЕЛ 1. УПРАВЛЕНИЕ СЕТЬЮ ######################
+# 1.1 Статический IP 192.168.1.100/24, шлюз 192.168.1.1, DNS 8.8.8.8, hostname
+nmcli connection show
 nmcli connection modify "$CON" ipv4.method manual ipv4.addresses "$IP" ipv4.gateway "$GW" ipv4.dns "$DNS"
 nmcli connection up "$CON"
 hostnamectl set-hostname mephi-2026.domain.local
-nmcli connection show "$CON" | grep -E '^ipv4\.(method|addresses|gateway|dns):'
+hostnamectl status
 ip -4 addr show
-# 1.2 Проверка сети: маршрут по умолчанию, связь со шлюзом и внешним миром
-ip route show default
-ping -c 4 "$GW"  | tee "$REPO/network_check.txt" || echo "!!! ping $GW не прошёл"
-ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt" || echo "!!! ping $DNS не прошёл"
-cp "$REPO/network_check.txt" /tmp/network_check.txt
 
-###################### РАЗДЕЛ 2. ПО ######################
-# 2.1 Установка пакетов из репозитория
+# 1.2 Проверка связности: маршрут по умолчанию, внешний мир, локальная сеть
+ip route show default
+set +e
+ping -c 4 "$DNS" > /tmp/network_check.txt
+ping -c 4 "$GW" >> /tmp/network_check.txt
+set -e
+cat /tmp/network_check.txt
+
+###################### РАЗДЕЛ 2. УПРАВЛЕНИЕ ПО ######################
+# 2.1 Установка пакетов из официальных репозиториев
 dnf install -y nginx tcpdump libcap-ng-utils
 dnf install -y policycoreutils-python-utils parted wget lynx
-# 2.2 Скачивание RPM и установка через rpm
+# 2.2 Скачивание RPM в /tmp и установка через rpm
 rm -f /tmp/tcpdump-*.rpm "$REPO"/tcpdump-*.rpm
 dnf download --destdir=/tmp tcpdump
 rpm -ivh --replacepkgs /tmp/tcpdump-*.rpm
 rpm -qi tcpdump | head -5
-cp /tmp/tcpdump-*.rpm "$REPO/"
 
 ###################### РАЗДЕЛ 3. ФС И СЕРВИСЫ ######################
-# 3.1 Разметка, ФС с меткой, автомонтирование
+# 3.1 Один раздел на весь второй диск, ext4 с меткой MEPHI_DATA, автомонтирование по метке
 systemctl stop nginx || true
 umount /data/mephi-web 2>/dev/null || true
 sed -i "\#[[:space:]]/data/mephi-web[[:space:]]#d" /etc/fstab
@@ -84,10 +87,17 @@ systemctl daemon-reload
 mount -a
 findmnt /data/mephi-web
 lsblk -f "$DISK"
-cp /etc/fstab "$REPO/fstab.txt"
 
-###################### РАЗДЕЛ 4. ДОСТУП ######################
-# 4.1 Пользователь, группа, права
+# 3.2 Запуск nginx, автозапуск, сообщения журнала за последние 5 минут
+systemctl start nginx
+systemctl enable nginx
+systemctl is-active nginx
+systemctl is-enabled nginx
+journalctl -u nginx --since "5 minutes ago" > /tmp/nginx_recent_logs.txt
+cat /tmp/nginx_recent_logs.txt
+
+###################### РАЗДЕЛ 4. УПРАВЛЕНИЕ ДОСТУПОМ ######################
+# 4.1 DAC: пользователь, группа, пароль, владелец и права 2775
 useradd -m -s /bin/bash mephi-admin || echo "mephi-admin уже существует"
 groupadd mephi-devs || echo "mephi-devs уже существует"
 echo "mephi-admin:P@ssw0rd2026" | chpasswd
@@ -95,68 +105,71 @@ usermod -aG mephi-devs mephi-admin
 usermod -aG wheel mephi-admin
 chown mephi-admin:mephi-devs /data/mephi-web
 chmod 2775 /data/mephi-web
-id mephi-admin | tee "$REPO/users_groups.txt"
-getent group mephi-devs | tee -a "$REPO/users_groups.txt"
+ls -ld /data/mephi-web
 
-# 4.2 SELinux: постоянное правило контекста
+# 4.2 MAC: SELinux Enforcing, контекст httpd_sys_content_t, nginx отдаёт /data/mephi-web
 setenforce 1
 sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
+getenforce
 semanage fcontext -a -t httpd_sys_content_t "/data/mephi-web(/.*)?" || semanage fcontext -m -t httpd_sys_content_t "/data/mephi-web(/.*)?"
 restorecon -Rv /data/mephi-web
-getenforce | tee "$REPO/selinux_status.txt"
+sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
+grep -q 'charset utf-8;' /etc/nginx/nginx.conf || sed -i '0,/^\([[:space:]]*\)root[[:space:]]\+\/data\/mephi-web;/s##&\n\1charset utf-8;#' /etc/nginx/nginx.conf
+grep -nE '^[[:space:]]*(root|charset)' /etc/nginx/nginx.conf
+nginx -t
+systemctl restart nginx
+if systemctl is-active -q firewalld; then
+  firewall-cmd --permanent --add-service=http
+  firewall-cmd --reload
+fi
 
-# 4.2 Capabilities вместо SUID для tcpdump
+# 4.2 Capabilities: снять SUID, cap_net_raw,cap_net_admin+ep, проверка от mephi-admin
 chmod u-s /usr/sbin/tcpdump
 setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
-getcap /usr/sbin/tcpdump | tee "$REPO/tcpdump_capabilities.txt"
-filecap /usr/sbin/tcpdump
+getcap /usr/sbin/tcpdump
 sudo -u mephi-admin tcpdump --help
-( sleep 2; ping -c 3 "$GW" >/dev/null ) &
-su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp' || true
 
-###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ТЕСТ ######################
-# 5.1 Запрет входа root через PAM (pam_listfile) в login и sshd + PermitRootLogin no
+###################### РАЗДЕЛ 5. АУТЕНТИФИКАЦИЯ И ПРОВЕРКА ######################
+# 5.1 root не может войти ни с консоли (login), ни по SSH (sshd): pam_listfile.so
 echo "root" > /etc/ssh/denied_users
 chmod 644 /etc/ssh/denied_users
 restorecon -v /etc/ssh/denied_users
 sed -i --follow-symlinks '/pam_listfile.so/d' /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth
 sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/login
 sed -i '1a auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users' /etc/pam.d/sshd
-grep pam_listfile /etc/pam.d/login
+grep pam_listfile /etc/pam.d/login /etc/pam.d/sshd
 echo 'PermitRootLogin no' > /etc/ssh/sshd_config.d/10-deny-root.conf
 sshd -t
 systemctl restart sshd
-grep pam_listfile /etc/pam.d/sshd
 
-# 3.2 / 5.2 nginx: web-root, страница, запуск и автозагрузка
-sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
-grep -q 'charset utf-8;' /etc/nginx/nginx.conf || sed -i '0,/^\([[:space:]]*\)root[[:space:]]\+\/data\/mephi-web;/s##&\n\1charset utf-8;#' /etc/nginx/nginx.conf
-grep -nE '^[[:space:]]*(root|charset)' /etc/nginx/nginx.conf
+# 5.2.1 Персональная страница, созданная пользователем mephi-admin
 sudo -u mephi-admin bash -c "echo 'Hello from Student: $STUDENT' > /data/mephi-web/index.html"
-ls -l /data/mephi-web/index.html
-restorecon -Rv /data/mephi-web
-ls -Zd /data/mephi-web | tee "$REPO/file_contexts.txt"
-ls -Z /data/mephi-web/index.html
-stat /data/mephi-web | tee "$REPO/permissions.txt"
-nginx -t
-systemctl start nginx
-systemctl enable nginx
-systemctl enable --now nginx
-systemctl restart nginx
-systemctl is-enabled nginx
-systemctl is-active nginx
-if systemctl is-active -q firewalld; then
-  firewall-cmd --permanent --add-service=http
-  firewall-cmd --reload
-fi
-curl -s "http://${IP%/*}" | tee "$REPO/curl_output.txt"
-curl -s http://localhost
-wget -qO- "http://${IP%/*}"
-lynx -dump "http://${IP%/*}"
+ls -lZ /data/mephi-web/index.html
+
+# 5.2.2 Итоговая проверка доступности
+curl http://localhost
+curl http://${IP%/*}
+wget -qO- http://${IP%/*}
+lynx -dump http://${IP%/*}
 ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
-journalctl -u nginx --since "5 minutes ago" --no-pager | tee "$REPO/nginx_recent_logs.txt"
-cp "$REPO/nginx_recent_logs.txt" /tmp/nginx_recent_logs.txt
-cp /data/mephi-web/index.html "$REPO/index.html"
+
+###################### РАЗДЕЛ 6. АРТЕФАКТЫ ДЛЯ GITHUB (команды из п. 6.1 ТЗ) ######################
+cd "$REPO"
+set +e
+ping -c 4 "$GW" > network_check.txt
+ping -c 4 "$DNS" >> network_check.txt
+set -e
+journalctl -u nginx --since "5 minutes ago" > nginx_recent_logs.txt
+cp /etc/fstab fstab.txt
+getenforce > selinux_status.txt
+ls -Zd /data/mephi-web > file_contexts.txt
+getcap /usr/sbin/tcpdump > tcpdump_capabilities.txt
+stat /data/mephi-web > permissions.txt
+id mephi-admin > users_groups.txt
+getent group mephi-devs >> users_groups.txt
+curl -s http://${IP%/*} > curl_output.txt
+cp /data/mephi-web/index.html index.html
+cp /tmp/tcpdump-*.rpm .
 sync
 
 # ---- сохранение истории и прав на файлы ----
@@ -165,4 +178,5 @@ save_history
 chown -R "${SUDO_USER:-mephi-admin}": "$REPO"
 echo
 echo "Готово. История команд: $REPO/project_history.txt"
-echo "Сделайте скриншот браузера на http://${IP%/*} -> mephi-nginx-screenshot.png, затем git add/commit/push."
+echo "Сделайте скриншоты (см. README): mephi-nginx-screenshot.png и _1_browser, _2_curl, _3_wget, _4_lynx,"
+echo "затем: git add -A && git commit -m 'Add MEPHI session project 2026 files' && git push"
