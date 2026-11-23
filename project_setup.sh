@@ -156,6 +156,7 @@ ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx не
 journalctl -u nginx --since "5 minutes ago" --no-pager | tee "$REPO/nginx_recent_logs.txt"
 cp "$REPO/nginx_recent_logs.txt" /tmp/nginx_recent_logs.txt
 cp /data/mephi-web/index.html "$REPO/index.html"
+sync
 
 # ---- сохранение истории и прав на файлы ----
 set +x
