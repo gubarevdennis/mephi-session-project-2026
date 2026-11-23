@@ -11,7 +11,12 @@
 | | |
 |---|---|
 | **Студент** | Губарев Денис |
-| **Зачётная книжка** | 017 |
+| **Зачётная книжка** | М2651068 |
+| **Группа** | М26-555 |
+| **Подразделение** | Институт интеллектуальных кибернетических систем (ИИКС) |
+| **Направление** | 01.04.02 «Прикладная математика и информатика» |
+| **Образовательная программа** | «Обработка данных и применение искусственного интеллекта» (кафедра 42) |
+| **Форма обучения** | очная |
 | **ОС** | Fedora 43 (минимальная установка) |
 | **Hostname** | mephi-2026.domain.local |
 | **IP адрес** | 192.168.1.100 |
@@ -29,7 +34,7 @@
 | `tcpdump_capabilities.txt` | 4.2 | cap_net_raw,cap_net_admin+ep |
 | `permissions.txt` | 4.1 | Права 2775, владелец mephi-admin:mephi-devs |
 | `users_groups.txt` | 4.1 | Пользователь mephi-admin, группа mephi-devs |
-| `index.html` | 5.2 | Hello from Student: 017 |
+| `index.html` | 5.2 | Hello from Student: М2651068 |
 | `curl_output.txt` | 5.2 | Результат curl http://192.168.1.100 |
 | `mephi-nginx-screenshot.png` | 5.2 | Скриншот работающего nginx |
 | `mephi-nginx-screenshot_1_browser.png` | 5.2 | Скриншот работающего nginx в браузере |
@@ -111,7 +116,7 @@ sudo -u mephi-admin tcpdump --help
 ### Раздел 5 — Аутентификация и тестирование 
 
 Вход `root` заблокирован через **PAM** (`pam_listfile.so`) и `PermitRootLogin no` в sshd.  
-Создана веб-страница `/data/mephi-web/index.html` (от имени `mephi-admin`).  
+Создана веб-страница `/data/mephi-web/index.html` (от имени `mephi-admin`), nginx отдаёт её в кодировке UTF-8 (`charset utf-8;`).  
 Сервер доступен по `http://192.168.1.100`.
 
 ```
@@ -119,14 +124,14 @@ echo "root" > /etc/ssh/denied_users
 # В /etc/pam.d/login и /etc/pam.d/sshd добавлена строка:
 # auth required pam_listfile.so onerr=succeed item=user sense=deny file=/etc/ssh/denied_users
 echo "PermitRootLogin no" > /etc/ssh/sshd_config.d/10-deny-root.conf
-sudo -u mephi-admin bash -c "echo 'Hello from Student: 017' > /data/mephi-web/index.html"
+sudo -u mephi-admin bash -c "echo 'Hello from Student: М2651068' > /data/mephi-web/index.html"
 curl http://localhost
 curl http://192.168.1.100
 ```
 
 Результат:
 ```
-Hello from Student: 017
+Hello from Student: М2651068
 ```
 
 ## Скриншоты

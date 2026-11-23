@@ -7,7 +7,7 @@
 #
 #  DISK — ОТДЕЛЬНЫЙ диск под /data/mephi-web (ВСЕ ДАННЫЕ НА НЁМ БУДУТ УДАЛЕНЫ).
 #  Необязательные переменные: IP (192.168.1.100/24), GW (192.168.1.1),
-#  DNS (8.8.8.8), STUDENT (017).
+#  DNS (8.8.8.8), STUDENT (М2651068).
 #
 #  Скрипт включает запись истории bash, поэтому каждая выполненная
 #  команда реально попадает в project_history.txt.
@@ -19,7 +19,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 IP="${IP:-192.168.1.100/24}"
 GW="${GW:-192.168.1.1}"
 DNS="${DNS:-8.8.8.8}"
-STUDENT="${STUDENT:-017}"
+STUDENT="${STUDENT:-М2651068}"
 
 [ "$(id -u)" -eq 0 ] || { echo "Запускать от root (sudo)"; exit 1; }
 [ -b "$DISK" ] || { echo "$DISK не блочное устройство"; exit 1; }
@@ -130,7 +130,8 @@ grep pam_listfile /etc/pam.d/sshd
 
 # 3.2 / 5.2 nginx: web-root, страница, запуск и автозагрузка
 sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
-grep -nE '^[[:space:]]*root' /etc/nginx/nginx.conf
+grep -q 'charset utf-8;' /etc/nginx/nginx.conf || sed -i '0,/^\([[:space:]]*\)root[[:space:]]\+\/data\/mephi-web;/s##&\n\1charset utf-8;#' /etc/nginx/nginx.conf
+grep -nE '^[[:space:]]*(root|charset)' /etc/nginx/nginx.conf
 sudo -u mephi-admin bash -c "echo 'Hello from Student: $STUDENT' > /data/mephi-web/index.html"
 ls -l /data/mephi-web/index.html
 restorecon -Rv /data/mephi-web
