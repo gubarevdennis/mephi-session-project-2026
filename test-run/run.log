@@ -20,28 +20,31 @@ ipv4.gateway:                           10.0.2.2
     altname enx525400123456
     inet 10.0.2.15/24 brd 10.0.2.255 scope global noprefixroute enp0s2
        valid_lft forever preferred_lft forever
++ ip route show default
+default via 10.0.2.2 dev enp0s2 proto static metric 100 
 + ping -c 4 10.0.2.2
 + tee /home/fedora/proj/network_check.txt
 PING 10.0.2.2 (10.0.2.2) 56(84) bytes of data.
-64 bytes from 10.0.2.2: icmp_seq=1 ttl=255 time=2.49 ms
-64 bytes from 10.0.2.2: icmp_seq=2 ttl=255 time=1.41 ms
-64 bytes from 10.0.2.2: icmp_seq=3 ttl=255 time=0.990 ms
-64 bytes from 10.0.2.2: icmp_seq=4 ttl=255 time=0.839 ms
+64 bytes from 10.0.2.2: icmp_seq=1 ttl=255 time=2.10 ms
+64 bytes from 10.0.2.2: icmp_seq=2 ttl=255 time=0.644 ms
+64 bytes from 10.0.2.2: icmp_seq=3 ttl=255 time=0.999 ms
+64 bytes from 10.0.2.2: icmp_seq=4 ttl=255 time=0.745 ms
 
 --- 10.0.2.2 ping statistics ---
 4 packets transmitted, 4 received, 0% packet loss, time 3007ms
-rtt min/avg/max/mdev = 0.839/1.430/2.487/0.644 ms
+rtt min/avg/max/mdev = 0.644/1.121/2.099/0.578 ms
 + ping -c 4 10.0.2.3
 + tee -a /home/fedora/proj/network_check.txt
 PING 10.0.2.3 (10.0.2.3) 56(84) bytes of data.
-64 bytes from 10.0.2.3: icmp_seq=1 ttl=255 time=1.12 ms
-64 bytes from 10.0.2.3: icmp_seq=2 ttl=255 time=1.30 ms
-64 bytes from 10.0.2.3: icmp_seq=3 ttl=255 time=0.940 ms
-64 bytes from 10.0.2.3: icmp_seq=4 ttl=255 time=0.644 ms
+64 bytes from 10.0.2.3: icmp_seq=1 ttl=255 time=0.764 ms
+64 bytes from 10.0.2.3: icmp_seq=2 ttl=255 time=0.804 ms
+64 bytes from 10.0.2.3: icmp_seq=3 ttl=255 time=1.05 ms
+64 bytes from 10.0.2.3: icmp_seq=4 ttl=255 time=1.30 ms
 
 --- 10.0.2.3 ping statistics ---
-4 packets transmitted, 4 received, 0% packet loss, time 3009ms
-rtt min/avg/max/mdev = 0.644/1.003/1.304/0.243 ms
+4 packets transmitted, 4 received, 0% packet loss, time 3008ms
+rtt min/avg/max/mdev = 0.764/0.977/1.296/0.213 ms
++ cp /home/fedora/proj/network_check.txt /tmp/network_check.txt
 + dnf install -y nginx tcpdump libcap-ng-utils
 Updating and loading repositories:
 Repositories loaded.
@@ -64,10 +67,7 @@ Nothing to do.
 Updating and loading repositories:
 Repositories loaded.
 Downloading Packages:
- tcpdump-14:4.99.6-2.fc43.x86_64        100% |  15.9 KiB/s | 503.7 KiB |  00m32s
->>> Curl error (28): Timeout was reached for https://ftp2.osuosl.org/pub/fedora/
->>> Status code: 405 for http://ftp2.osuosl.org/pub/fedora/linux/updates/43/Ever
->>> Status code: 405 for http://paducahix.mm.fcix.net/fedora/linux/updates/43/Ev
+ tcpdump-14:4.99.6-2.fc43.x86_64        100% | 802.0 KiB/s | 503.7 KiB |  00m01s
 + rpm -ivh --replacepkgs /tmp/tcpdump-4.99.6-2.fc43.x86_64.rpm
 Verifying...                          ########################################
 Preparing...                          ########################################
@@ -97,7 +97,7 @@ Architecture: x86_64
 mke2fs 1.47.3 (8-Jul-2025)
 Discarding device blocks:      0/523776             done                            
 Creating filesystem with 523776 4k blocks and 131072 inodes
-Filesystem UUID: 78264f09-1520-4587-afad-a0d6600855bb
+Filesystem UUID: 270a9ed2-6965-4b97-bd5a-fa4948f602e3
 Superblock backups stored on blocks: 
 	32768, 98304, 163840, 229376, 294912
 
@@ -116,7 +116,7 @@ TARGET          SOURCE    FSTYPE OPTIONS
 + lsblk -f /dev/vdb
 NAME   FSTYPE FSVER LABEL      UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
 vdb                                                                                
-└─vdb1 ext4   1.0   MEPHI_DATA 78264f09-1520-4587-afad-a0d6600855bb    1.8G     0% /data/mephi-web
+└─vdb1 ext4   1.0   MEPHI_DATA 270a9ed2-6965-4b97-bd5a-fa4948f602e3    1.8G     0% /data/mephi-web
 + cp /etc/fstab /home/fedora/proj/fstab.txt
 + useradd -m -s /bin/bash mephi-admin
 useradd: user 'mephi-admin' already exists
@@ -126,18 +126,17 @@ mephi-admin уже существует
 groupadd: group 'mephi-devs' already exists
 + echo 'mephi-devs уже существует'
 mephi-devs уже существует
++ echo mephi-admin:P@ssw0rd2026
++ chpasswd
 + usermod -aG mephi-devs mephi-admin
 + usermod -aG wheel mephi-admin
 + chown mephi-admin:mephi-devs /data/mephi-web
 + chmod 2775 /data/mephi-web
-+ echo ' --- id mephi-admin --- '
 + id mephi-admin
 + tee /home/fedora/proj/users_groups.txt
- --- id mephi-admin --- 
 uid=1001(mephi-admin) gid=1001(mephi-admin) groups=1001(mephi-admin),10(wheel),1002(mephi-devs)
-+ echo ' --- getent group mephi-devs --- '
 + getent group mephi-devs
- --- getent group mephi-devs --- 
++ tee -a /home/fedora/proj/users_groups.txt
 mephi-devs:x:1002:mephi-admin
 + setenforce 1
 + sed -i 's/^SELINUX=.*/SELINUX=enforcing/' /etc/selinux/config
@@ -157,6 +156,19 @@ Enforcing
 + filecap /usr/sbin/tcpdump
 set       file                   capabilities  rootid
 effective /usr/sbin/tcpdump      net_admin, net_raw
++ sudo -u mephi-admin tcpdump --help
+tcpdump version 4.99.6
+libpcap version 1.10.7 (64-bit time_t, with TPACKET_V3)
+OpenSSL 3.5.1 1 Jul 2025
+64-bit build, 64-bit time_t
+Usage: tcpdump [-AbdDefghHIJKlLnNOpqStuUvxX#] [ -B size ] [ -c count ] [--count]
+		[ -C file_size ] [ -E algo:secret ] [ -F file ] [ -G seconds ]
+		[ -i interface ] [ --immediate-mode ] [ -j tstamptype ]
+		[ -M secret ] [ --number ] [ --print ] [ -Q in|out|inout ]
+		[ -r file ] [ -s snaplen ] [ -T type ] [ --version ]
+		[ -V file ] [ -w file ] [ -W filecount ] [ -y datalinktype ]
+		[ --time-stamp-precision precision ] [ --micro ] [ --nano ]
+		[ -z postrotate-command ] [ -Z user ] [ expression ]
 + su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp'
 + sleep 2
 + ping -c 3 10.0.2.2
@@ -164,13 +176,12 @@ tcpdump: WARNING: any: That device doesn't support promiscuous mode
 (Promiscuous mode not supported on the "any" device)
 tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
 listening on any, link-type LINUX_SLL2 (Linux cooked v2), snapshot length 262144 bytes
-05:11:30.316808 enp0s2 Out IP 10.0.2.15 > 10.0.2.2: ICMP echo request, id 3, seq 3, length 64
-05:11:30.318880 enp0s2 In  IP 10.0.2.2 > 10.0.2.15: ICMP echo reply, id 3, seq 3, length 64
-
-2 packets captured
-2 packets received by filter
+10:43:30.023804 enp0s2 Out IP 10.0.2.15 > 10.0.2.2: ICMP echo request, id 3, seq 2, length 64
+10:43:30.026311 enp0s2 In  IP 10.0.2.2 > 10.0.2.15: ICMP echo reply, id 3, seq 2, length 64
+10:43:31.024924 enp0s2 Out IP 10.0.2.15 > 10.0.2.2: ICMP echo request, id 3, seq 3, length 64
+3 packets captured
+4 packets received by filter
 0 packets dropped by kernel
-+ true
 + echo root
 + chmod 644 /etc/ssh/denied_users
 + restorecon -v /etc/ssh/denied_users
@@ -187,14 +198,14 @@ auth       required     pam_listfile.so onerr=succeed item=user sense=deny file=
 + sed -i '0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#' /etc/nginx/nginx.conf
 + grep -nE '^[[:space:]]*root' /etc/nginx/nginx.conf
 36:        root         /data/mephi-web;
-+ echo 'Hello from Student: 017'
-+ chown mephi-admin:mephi-devs /data/mephi-web/index.html
++ sudo -u mephi-admin bash -c 'echo '\''Hello from Student: 017'\'' > /data/mephi-web/index.html'
++ ls -l /data/mephi-web/index.html
+-rw-r--r--. 1 mephi-admin mephi-devs 24 Nov 23 10:43 /data/mephi-web/index.html
 + restorecon -Rv /data/mephi-web
 + ls -Zd /data/mephi-web
 + tee /home/fedora/proj/file_contexts.txt
 system_u:object_r:httpd_sys_content_t:s0 /data/mephi-web
 + ls -Z /data/mephi-web/index.html
-+ tee -a /home/fedora/proj/file_contexts.txt
 unconfined_u:object_r:httpd_sys_content_t:s0 /data/mephi-web/index.html
 + stat /data/mephi-web
 + tee /home/fedora/proj/permissions.txt
@@ -203,10 +214,10 @@ unconfined_u:object_r:httpd_sys_content_t:s0 /data/mephi-web/index.html
 Device: 253,17	Inode: 2           Links: 3
 Access: (2775/drwxrwsr-x)  Uid: ( 1001/mephi-admin)   Gid: ( 1002/mephi-devs)
 Context: system_u:object_r:httpd_sys_content_t:s0
-Access: 2026-11-22 05:11:42.038718766 +0000
-Modify: 2026-11-22 05:11:41.759718752 +0000
-Change: 2026-11-22 05:11:41.759718752 +0000
- Birth: 2026-11-22 05:10:55.000000000 +0000
+Access: 2026-11-23 10:43:34.104101336 +0000
+Modify: 2026-11-23 10:43:33.881101322 +0000
+Change: 2026-11-23 10:43:33.881101322 +0000
+ Birth: 2026-11-23 10:43:07.000000000 +0000
 + nginx -t
 nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
 nginx: configuration file /etc/nginx/nginx.conf test is successful
@@ -232,41 +243,31 @@ Hello from Student: 017
 <no matches>
 + echo 'AVC-отказов для nginx нет'
 AVC-отказов для nginx нет
-+ journalctl -u nginx --no-pager -n 30
++ journalctl -u nginx --since '5 minutes ago' --no-pager
 + tee /home/fedora/proj/nginx_recent_logs.txt
-Nov 22 04:14:30 mephi-2026.domain.local nginx[877]: nginx: configuration file /etc/nginx/nginx.conf test is successful
-Nov 22 04:14:31 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
--- Boot 9a537b699cd24ecf89c95ab8e8a087ac --
-Nov 22 04:31:49 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 04:31:51 mephi-2026.domain.local nginx[877]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
-Nov 22 04:31:51 mephi-2026.domain.local nginx[877]: nginx: configuration file /etc/nginx/nginx.conf test is successful
-Nov 22 04:31:52 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
-Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
-Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
-Nov 22 04:35:33 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 2.058s CPU time, 10.3M memory peak.
--- Boot 616b58a0d42a400f873e9d79358ca804 --
-Nov 22 05:08:44 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 05:08:46 mephi-2026.domain.local nginx[878]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
-Nov 22 05:08:46 mephi-2026.domain.local nginx[878]: nginx: configuration file /etc/nginx/nginx.conf test is successful
-Nov 22 05:08:47 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
-Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
-Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
-Nov 22 05:10:53 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 2.573s CPU time, 10.6M memory peak.
-Nov 22 05:11:43 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 05:11:44 mephi-2026.domain.local nginx[1326]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
-Nov 22 05:11:44 mephi-2026.domain.local nginx[1326]: nginx: configuration file /etc/nginx/nginx.conf test is successful
-Nov 22 05:11:45 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
-Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
-Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
-Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 1.750s CPU time, 6.3M memory peak.
-Nov 22 05:11:56 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
-Nov 22 05:11:58 mephi-2026.domain.local nginx[1445]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
-Nov 22 05:11:58 mephi-2026.domain.local nginx[1445]: nginx: configuration file /etc/nginx/nginx.conf test is successful
-Nov 22 05:11:59 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+Nov 23 10:41:26 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 23 10:41:28 mephi-2026.domain.local nginx[876]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 23 10:41:28 mephi-2026.domain.local nginx[876]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 23 10:41:28 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+Nov 23 10:43:05 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
+Nov 23 10:43:05 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
+Nov 23 10:43:05 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
+Nov 23 10:43:05 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 1.988s CPU time, 10.4M memory peak.
+Nov 23 10:43:34 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 23 10:43:35 mephi-2026.domain.local nginx[1457]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 23 10:43:35 mephi-2026.domain.local nginx[1457]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 23 10:43:36 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
+Nov 23 10:43:44 mephi-2026.domain.local systemd[1]: Stopping nginx.service - The nginx HTTP and reverse proxy server...
+Nov 23 10:43:44 mephi-2026.domain.local systemd[1]: nginx.service: Deactivated successfully.
+Nov 23 10:43:44 mephi-2026.domain.local systemd[1]: Stopped nginx.service - The nginx HTTP and reverse proxy server.
+Nov 23 10:43:44 mephi-2026.domain.local systemd[1]: nginx.service: Consumed 1.139s CPU time, 6M memory peak.
+Nov 23 10:43:44 mephi-2026.domain.local systemd[1]: Starting nginx.service - The nginx HTTP and reverse proxy server...
+Nov 23 10:43:45 mephi-2026.domain.local nginx[1576]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Nov 23 10:43:45 mephi-2026.domain.local nginx[1576]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Nov 23 10:43:45 mephi-2026.domain.local systemd[1]: Started nginx.service - The nginx HTTP and reverse proxy server.
++ cp /home/fedora/proj/nginx_recent_logs.txt /tmp/nginx_recent_logs.txt
 + cp /data/mephi-web/index.html /home/fedora/proj/index.html
++ sync
 + set +x
 
 Готово. История команд: /home/fedora/proj/project_history.txt
