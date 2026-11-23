@@ -51,9 +51,11 @@ nmcli connection up "$CON"
 hostnamectl set-hostname mephi-2026.domain.local
 nmcli connection show "$CON" | grep -E '^ipv4\.(method|addresses|gateway|dns):'
 ip -4 addr show
-# 1.2 Проверка сети
+# 1.2 Проверка сети: маршрут по умолчанию, связь со шлюзом и внешним миром
+ip route show default
 ping -c 4 "$GW"  | tee "$REPO/network_check.txt" || echo "!!! ping $GW не прошёл"
 ping -c 4 "$DNS" | tee -a "$REPO/network_check.txt" || echo "!!! ping $DNS не прошёл"
+cp "$REPO/network_check.txt" /tmp/network_check.txt
 
 ###################### РАЗДЕЛ 2. ПО ######################
 # 2.1 Установка пакетов из репозитория
@@ -88,6 +90,7 @@ cp /etc/fstab "$REPO/fstab.txt"
 # 4.1 Пользователь, группа, права
 useradd -m -s /bin/bash mephi-admin || echo "mephi-admin уже существует"
 groupadd mephi-devs || echo "mephi-devs уже существует"
+echo "mephi-admin:P@ssw0rd2026" | chpasswd
 usermod -aG mephi-devs mephi-admin
 usermod -aG wheel mephi-admin
 chown mephi-admin:mephi-devs /data/mephi-web
@@ -107,6 +110,7 @@ chmod u-s /usr/sbin/tcpdump
 setcap cap_net_raw,cap_net_admin+ep /usr/sbin/tcpdump
 getcap /usr/sbin/tcpdump | tee "$REPO/tcpdump_capabilities.txt"
 filecap /usr/sbin/tcpdump
+sudo -u mephi-admin tcpdump --help
 ( sleep 2; ping -c 3 "$GW" >/dev/null ) &
 su - mephi-admin -c 'timeout 10 tcpdump -c 3 -i any -nn icmp' || true
 
@@ -127,8 +131,8 @@ grep pam_listfile /etc/pam.d/sshd
 # 3.2 / 5.2 nginx: web-root, страница, запуск и автозагрузка
 sed -i "0,/^\([[:space:]]*root[[:space:]]\+\).*;/s##\1/data/mephi-web;#" /etc/nginx/nginx.conf
 grep -nE '^[[:space:]]*root' /etc/nginx/nginx.conf
-echo "Hello from Student: $STUDENT" > /data/mephi-web/index.html
-chown mephi-admin:mephi-devs /data/mephi-web/index.html
+sudo -u mephi-admin bash -c "echo 'Hello from Student: $STUDENT' > /data/mephi-web/index.html"
+ls -l /data/mephi-web/index.html
 restorecon -Rv /data/mephi-web
 ls -Zd /data/mephi-web | tee "$REPO/file_contexts.txt"
 ls -Z /data/mephi-web/index.html
@@ -149,7 +153,8 @@ curl -s http://localhost
 wget -qO- "http://${IP%/*}"
 lynx -dump "http://${IP%/*}"
 ausearch -m AVC -c nginx -ts today || echo "AVC-отказов для nginx нет"
-journalctl -u nginx --no-pager -n 30 | tee "$REPO/nginx_recent_logs.txt"
+journalctl -u nginx --since "5 minutes ago" --no-pager | tee "$REPO/nginx_recent_logs.txt"
+cp "$REPO/nginx_recent_logs.txt" /tmp/nginx_recent_logs.txt
 cp /data/mephi-web/index.html "$REPO/index.html"
 
 # ---- сохранение истории и прав на файлы ----
