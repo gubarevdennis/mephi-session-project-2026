@@ -66,8 +66,8 @@ nmcli connection modify eth0 ipv4.method manual \
 
 hostnamectl set-hostname mephi-2026.domain.local
 ip route show default
-ping -c 4 192.168.1.1 > ~/network_check.txt
-ping -c 4 8.8.8.8 >> ~/network_check.txt
+ping -c 4 8.8.8.8 > /tmp/network_check.txt
+ping -c 4 192.168.1.1 >> /tmp/network_check.txt
 ```
 
 ### Раздел 2 — Управление программным обеспечением 
@@ -93,8 +93,9 @@ mkfs.ext4 -L MEPHI_DATA /dev/sdb1
 mkdir -p /data/mephi-web
 echo "LABEL=MEPHI_DATA  /data/mephi-web  ext4  defaults  0 2" >> /etc/fstab
 mount -a
-systemctl enable --now nginx
-journalctl -u nginx --since "5 minutes ago" > ~/nginx_recent_logs.txt
+systemctl start nginx
+systemctl enable nginx
+journalctl -u nginx --since "5 minutes ago" > /tmp/nginx_recent_logs.txt
 ```
 
 ### Раздел 4 — Управление доступом 
