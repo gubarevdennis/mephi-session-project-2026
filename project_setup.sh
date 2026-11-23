@@ -102,7 +102,6 @@ useradd -m -s /bin/bash mephi-admin || echo "mephi-admin уже существу
 groupadd mephi-devs || echo "mephi-devs уже существует"
 echo "mephi-admin:P@ssw0rd2026" | chpasswd
 usermod -aG mephi-devs mephi-admin
-usermod -aG wheel mephi-admin
 chown mephi-admin:mephi-devs /data/mephi-web
 chmod 2775 /data/mephi-web
 ls -ld /data/mephi-web
